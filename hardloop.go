@@ -1,0 +1,344 @@
+package hardloop
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"time"
+)
+
+var GapDuration = 5 * time.Second
+var GapDurationNext = 2 * time.Second
+
+var ErrCloseLoop = errors.New("close loop")
+var ErrTimeNotSet = errors.New("timeless schedule")
+
+type Loop struct {
+	startSchedules    []Schedule
+	stopSchedules     []Schedule
+	isLoopRunning     bool
+	isFunctionRunning bool
+	fn                func(ctx context.Context, wg *sync.WaitGroup) error
+	mx                sync.RWMutex
+	wg                sync.WaitGroup
+	cancelFn          context.CancelFunc
+	cancelLoop        context.CancelFunc
+	exited            chan struct{}
+	startDuration     chan *time.Duration
+	stopDuration      chan *time.Duration
+}
+
+// NewLoop returns a new Loop with the given start and end cron specs and function.
+//  - Standard crontab specs, e.g. "* * * * ?"
+//  - Descriptors, e.g. "@midnight", "@every 1h30m"
+func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context, wg *sync.WaitGroup) error) (*Loop, error) {
+	var startSchedules []Schedule
+	var stopSchedules []Schedule
+
+	for _, spec := range startSpec {
+		startSchedule, err := ParseStandard(spec)
+		if err != nil {
+			return nil, err
+		}
+
+		startSchedules = append(startSchedules, startSchedule)
+	}
+
+	for _, spec := range endSpec {
+		stopSchedule, err := ParseStandard(spec)
+		if err != nil {
+			return nil, err
+		}
+
+		stopSchedules = append(stopSchedules, stopSchedule)
+	}
+
+	return &Loop{
+		startSchedules:    startSchedules,
+		stopSchedules:     stopSchedules,
+		isLoopRunning:     false,
+		isFunctionRunning: false,
+		fn:                fn,
+		exited:            make(chan struct{}, 1),
+		startDuration:     make(chan *time.Duration, 1),
+		stopDuration:      make(chan *time.Duration, 1),
+	}, nil
+}
+
+// ChangeStartSchedules sets the start cron specs.
+func (l *Loop) ChangeStartSchedules(startSpecs []string) error {
+	var startSchedules []Schedule
+
+	for _, spec := range startSpecs {
+		startSchedule, err := ParseStandard(spec)
+		if err != nil {
+			return err
+		}
+
+		startSchedules = append(startSchedules, startSchedule)
+	}
+
+	l.startSchedules = startSchedules
+
+	return nil
+}
+
+// ChangeStopSchedule sets the end cron specs.
+func (l *Loop) ChangeStopSchedules(startSpecs []string) error {
+	var stopSchedules []Schedule
+
+	for _, spec := range startSpecs {
+		stopSchedule, err := ParseStandard(spec)
+		if err != nil {
+			return err
+		}
+
+		stopSchedules = append(stopSchedules, stopSchedule)
+	}
+
+	l.stopSchedules = stopSchedules
+
+	return nil
+}
+
+// IsLoopRunning returns true if the loop is running.
+func (l *Loop) IsLoopRunning() bool {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+
+	return l.isLoopRunning
+}
+
+// IsFunctionRunning returns true if the function is running.
+func (l *Loop) IsFunctionRunning() bool {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+
+	return l.isFunctionRunning
+}
+
+// SetFunction sets the function to be called when the loop is started.
+// Function should be blocking.
+func (l *Loop) SetFunction(fn func(ctx context.Context, wg *sync.WaitGroup) error, stopPreviousFunction bool) {
+	l.fn = fn
+}
+
+// Run starts the loop.
+func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
+	if l.IsLoopRunning() {
+		return
+	}
+
+	var ctxLoop context.Context
+	ctxLoop, l.cancelLoop = context.WithCancel(ctx)
+
+	// listen function exit
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-ctx.Done():
+				break
+			case <-l.exited:
+				now := time.Now().Add(GapDuration + GapDurationNext)
+				// check it can run in now
+				stopTime, _ := l.getStopTime(now)
+				if stopTime != nil {
+					l.runFunction(ctxLoop, wg)
+
+					continue
+				}
+
+				now = time.Now()
+				// check next time to start again
+				startTime, _ := l.getStartTime(now)
+				if startTime == nil {
+					// disable next start time
+					l.startDuration <- nil
+
+					continue
+				}
+
+				// set next start time
+				duration := startTime.Sub(now)
+				l.startDuration <- &duration
+			}
+		}
+	}()
+
+	// listen start time
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		var chStartDuration <-chan time.Time
+
+		for {
+			select {
+			case <-ctxLoop.Done():
+				break
+			case startDuration := <-l.startDuration:
+				if startDuration == nil {
+					// disable
+					chStartDuration = nil
+
+					// run now
+					l.runFunction(ctxLoop, wg)
+
+					continue
+				}
+
+				// set next start time
+				chStartDuration = time.After(*startDuration)
+			case <-chStartDuration:
+				// run function
+				l.runFunction(ctxLoop, wg)
+			}
+		}
+	}()
+
+	// listen stop time
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		var chStopDuration <-chan time.Time
+
+		for {
+			select {
+			case <-ctxLoop.Done():
+				break
+			case stopDuration := <-l.stopDuration:
+				if stopDuration == nil {
+					// disable
+					chStopDuration = nil
+
+					continue
+				}
+
+				// set next start time
+				chStopDuration = time.After(*stopDuration)
+			case <-chStopDuration:
+				// run function
+				l.stopFunction(ctxLoop, wg)
+			}
+		}
+	}()
+
+	// first initialize
+	l.initializeTime(ctxLoop, wg)
+}
+
+func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	if l.isFunctionRunning {
+		return
+	}
+
+	l.isFunctionRunning = true
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var ctxInFunc context.Context
+		ctxInFunc, l.cancelFn = context.WithCancel(ctx)
+		err := l.fn(ctxInFunc, &l.wg)
+		l.wg.Wait()
+
+		// set running to false
+		l.mx.Lock()
+		defer l.mx.Unlock()
+		l.isFunctionRunning = false
+
+		if errors.Is(err, ErrCloseLoop) {
+			l.cancelLoop()
+
+			return
+		}
+		// trigger exited
+		l.exited <- struct{}{}
+	}()
+
+	// set next stop time
+	now := time.Now().Add(GapDuration)
+	stopTime, _ := l.getStopTime(now)
+	if stopTime == nil {
+		// disable next stop time
+		l.stopDuration <- nil
+
+		return
+	}
+
+	stopDuration := stopTime.Sub(now)
+	l.stopDuration <- &stopDuration
+}
+
+func (l *Loop) stopFunction(ctx context.Context, wg *sync.WaitGroup) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+
+	if !l.isFunctionRunning {
+		// trigger exited
+		l.exited <- struct{}{}
+		return
+	}
+
+	l.isFunctionRunning = false
+
+	l.cancelFn()
+	l.wg.Wait()
+}
+
+func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
+	v, _ := l.getStopTime(time.Now().Add(GapDuration))
+	if v != nil {
+		// function should run now
+		l.runFunction(ctx, wg)
+		return
+	}
+
+	// set next start time
+	l.exited <- struct{}{}
+}
+
+// getStartTime if return nil, start now
+func (l *Loop) getStartTime(now time.Time) (*time.Time, error) {
+	nextStart := FindNext(l.startSchedules, now)
+
+	if nextStart.IsZero() {
+		return nil, ErrTimeNotSet
+	}
+
+	return &nextStart, nil
+}
+
+// getStopTime if return nil, stop now
+func (l *Loop) getStopTime(now time.Time) (*time.Time, error) {
+	prevStop := FindPrev(l.stopSchedules, now)
+
+	if prevStop.IsZero() {
+		// stop the loop
+		return nil, ErrTimeNotSet
+	}
+
+	prevStart := FindPrev(l.startSchedules, now)
+
+	// if prevStop is after prevStart, then we should stop the loop
+	if !prevStart.IsZero() && prevStop.After(prevStart) {
+		// stop the loop
+		return nil, nil
+	}
+
+	nextStop := FindNext(l.stopSchedules, now)
+
+	if nextStop.IsZero() {
+		// stop the loop
+		return nil, ErrTimeNotSet
+	}
+
+	return &nextStop, nil
+}
