@@ -7,11 +7,17 @@ import (
 	"time"
 )
 
-var GapDuration = 5 * time.Second
-var GapDurationNext = 2 * time.Second
+// GapDurationStart to start the function should be at least 1 second bigger than gap duration
+var GapDurationStart time.Duration = 1 * time.Second
 
-var ErrCloseLoop = errors.New("close loop")
-var ErrTimeNotSet = errors.New("timeless schedule")
+// GapDurationStop to stop the function
+var GapDurationStop time.Duration = 0
+
+var (
+	// ErrCloseLoop is returned when the loop should be closed.
+	ErrCloseLoop  = errors.New("close loop")
+	errTimeNotSet = errors.New("timeless schedule")
+)
 
 type Loop struct {
 	startSchedules    []Schedule
@@ -142,7 +148,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 			case <-ctx.Done():
 				break
 			case <-l.exited:
-				now := time.Now().Add(GapDuration + GapDurationNext)
+				now := time.Now().Add(GapDurationStart)
 				// check it can run in now
 				stopTime, _ := l.getStopTime(now)
 				if stopTime != nil {
@@ -174,6 +180,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 
 		var chStartDuration <-chan time.Time
+		var startTimer *time.Timer
 
 		for {
 			select {
@@ -191,7 +198,17 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 				}
 
 				// set next start time
-				chStartDuration = time.After(*startDuration)
+				startTimerChange := time.NewTimer(*startDuration)
+				chStartDuration = startTimerChange.C
+
+				if startTimer != nil {
+					startTimer.Stop()
+					select {
+					case <-startTimer.C:
+					default:
+					}
+				}
+				startTimer = startTimerChange
 			case <-chStartDuration:
 				// run function
 				l.runFunction(ctxLoop, wg)
@@ -205,6 +222,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 
 		var chStopDuration <-chan time.Time
+		var stopTimer *time.Timer
 
 		for {
 			select {
@@ -218,8 +236,18 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 					continue
 				}
 
-				// set next start time
-				chStopDuration = time.After(*stopDuration)
+				// set next stop time
+				stopTimerChange := time.NewTimer(*stopDuration)
+				chStopDuration = stopTimerChange.C
+
+				if stopTimer != nil {
+					stopTimer.Stop()
+					select {
+					case <-stopTimer.C:
+					default:
+					}
+				}
+				stopTimer = stopTimerChange
 			case <-chStopDuration:
 				// run function
 				l.stopFunction(ctxLoop, wg)
@@ -264,7 +292,7 @@ func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 
 	// set next stop time
-	now := time.Now().Add(GapDuration)
+	now := time.Now().Add(GapDurationStop)
 	stopTime, _ := l.getStopTime(now)
 	if stopTime == nil {
 		// disable next stop time
@@ -294,7 +322,7 @@ func (l *Loop) stopFunction(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
-	v, _ := l.getStopTime(time.Now().Add(GapDuration))
+	v, _ := l.getStopTime(time.Now().Add(GapDurationStart))
 	if v != nil {
 		// function should run now
 		l.runFunction(ctx, wg)
@@ -310,7 +338,7 @@ func (l *Loop) getStartTime(now time.Time) (*time.Time, error) {
 	nextStart := FindNext(l.startSchedules, now)
 
 	if nextStart.IsZero() {
-		return nil, ErrTimeNotSet
+		return nil, errTimeNotSet
 	}
 
 	return &nextStart, nil
@@ -322,7 +350,7 @@ func (l *Loop) getStopTime(now time.Time) (*time.Time, error) {
 
 	if prevStop.IsZero() {
 		// stop the loop
-		return nil, ErrTimeNotSet
+		return nil, errTimeNotSet
 	}
 
 	prevStart := FindPrev(l.startSchedules, now)
@@ -337,7 +365,7 @@ func (l *Loop) getStopTime(now time.Time) (*time.Time, error) {
 
 	if nextStop.IsZero() {
 		// stop the loop
-		return nil, ErrTimeNotSet
+		return nil, errTimeNotSet
 	}
 
 	return &nextStop, nil
