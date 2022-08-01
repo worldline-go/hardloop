@@ -59,11 +59,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Start the schedule.
-	wg := &sync.WaitGroup{}
-
 	// run forever in goroutine (or until the function returns ErrLoopExited)
-	myFunctionLoop.Run(context.Background(), wg)
-
-	wg.Wait()
+	myFunctionLoop.RunWait(context.Background())
 }

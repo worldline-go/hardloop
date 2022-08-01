@@ -129,6 +129,13 @@ func (l *Loop) SetFunction(fn func(ctx context.Context, wg *sync.WaitGroup) erro
 	l.fn = fn
 }
 
+// RunWait starts the loop and wait to exit with ErrLoopExited.
+func (l *Loop) RunWait(ctx context.Context) {
+	wg := &sync.WaitGroup{}
+	l.Run(ctx, wg)
+	wg.Wait()
+}
+
 // Run starts the loop.
 func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 	if l.IsLoopRunning() {
@@ -145,8 +152,8 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 		for {
 			select {
-			case <-ctx.Done():
-				break
+			case <-ctxLoop.Done():
+				return
 			case <-l.exited:
 				now := time.Now().Add(GapDurationStart)
 				// check it can run in now
@@ -185,7 +192,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-ctxLoop.Done():
-				break
+				return
 			case startDuration := <-l.startDuration:
 				if startDuration == nil {
 					// disable
@@ -227,7 +234,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-ctxLoop.Done():
-				break
+				return
 			case stopDuration := <-l.stopDuration:
 				if stopDuration == nil {
 					// disable
