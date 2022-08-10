@@ -3,6 +3,7 @@ package hardloop
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -186,7 +187,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 				// set next start time
 				if l.log != nil {
-					l.log.Info("Next start time: %s", startTime)
+					l.log.Info(fmt.Sprintf("Next start time: [%s]", startTime))
 				}
 				duration := startTime.Sub(now)
 				l.startDuration <- &duration
@@ -326,7 +327,7 @@ func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
 	}
 
 	if l.log != nil {
-		l.log.Info("Next stop time: %s", stopTime)
+		l.log.Info(fmt.Sprintf("Next stop time: [%s]", stopTime))
 	}
 
 	stopDuration := stopTime.Sub(now)

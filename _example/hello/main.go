@@ -39,16 +39,16 @@ func MyFunction(ctx context.Context, wg *sync.WaitGroup) error {
 type myLog struct{}
 
 func (myLog) Error(msg string, keysAndValues ...interface{}) {
-	log.Printf(msg, keysAndValues...)
+	log.Println(msg, keysAndValues)
 }
 func (myLog) Info(msg string, keysAndValues ...interface{}) {
-	log.Printf(msg, keysAndValues...)
+	log.Println(msg, keysAndValues)
 }
 func (myLog) Debug(msg string, keysAndValues ...interface{}) {
-	log.Printf(msg, keysAndValues...)
+	log.Println(msg, keysAndValues)
 }
 func (myLog) Warn(msg string, keysAndValues ...interface{}) {
-	log.Printf(msg, keysAndValues...)
+	log.Println(msg, keysAndValues)
 }
 
 func main() {

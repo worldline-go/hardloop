@@ -58,3 +58,14 @@ Implement Logger interface and set to the loop.
 ```go
 myFunctionLoop.SetLogger(myLog{})
 ```
+
+## Development
+
+Test code
+
+```sh
+go test -cover -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+go tool cover -html=coverage.out
+# go tool cover -html coverage.out -o coverage.html
+```
