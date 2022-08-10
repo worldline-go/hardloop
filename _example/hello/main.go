@@ -36,18 +36,33 @@ func MyFunction(ctx context.Context, wg *sync.WaitGroup) error {
 	return nil
 }
 
+type myLog struct{}
+
+func (myLog) Error(msg string, keysAndValues ...interface{}) {
+	log.Printf(msg, keysAndValues...)
+}
+func (myLog) Info(msg string, keysAndValues ...interface{}) {
+	log.Printf(msg, keysAndValues...)
+}
+func (myLog) Debug(msg string, keysAndValues ...interface{}) {
+	log.Printf(msg, keysAndValues...)
+}
+func (myLog) Warn(msg string, keysAndValues ...interface{}) {
+	log.Printf(msg, keysAndValues...)
+}
+
 func main() {
 	// Set start cron specs.
 	startSpecs := []string{
 		// start at 7:00 in Monday, Tuesday, Wednesday, Thursday, Friday
-		"0 7 * * 1,2,3,4,5",
+		"CRON_TZ=Europe/Amsterdam 0 7 * * 1,2,3,4,5",
 		// start at 9:00 in Saturday
 		"0 9 * * 6",
 	}
 	// Set stop cron specs.
 	stopSpecs := []string{
-		// stop at 14:00 in Monday, Tuesday, Wednesday, Thursday, Friday
-		"0 14 * * 1,2,3,4,5",
+		// stop at 17:00 in Monday, Tuesday, Wednesday, Thursday, Friday
+		"0 17 * * 1,2,3,4,5",
 		// stop at 13:00 in Saturday
 		"0 13 * * 6",
 	}
@@ -58,6 +73,8 @@ func main() {
 		// wrong cron specs
 		log.Fatal(err)
 	}
+
+	myFunctionLoop.SetLogger(myLog{})
 
 	// run forever in goroutine (or until the function returns ErrLoopExited)
 	myFunctionLoop.RunWait(context.Background())

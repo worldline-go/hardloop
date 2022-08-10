@@ -20,6 +20,10 @@ If stop time is not given, it will run forever.
 
 If just stop time given, it will restart in the stop times.
 
+Use Timezone to set the timezone: `CRON_TZ=Europe/Istanbul 0 7 * * 1,2,3,4,5` 
+
+Default timezone is system timezone.
+
 ```go
 // Set start cron specs.
 startSpecs := []string{
@@ -43,11 +47,14 @@ if err != nil {
     log.Fatal(err)
 }
 
-// Start the schedule.
-wg := &sync.WaitGroup{}
-
 // run forever in goroutine (or until the function returns ErrLoopExited)
-myFunctionLoop.Run(context.Background(), wg)
+myFunctionLoop.RunWait(context.Background(), wg)
+```
 
-wg.Wait()
+### Set Logger
+
+Implement Logger interface and set to the loop.
+
+```go
+myFunctionLoop.SetLogger(myLog{})
 ```

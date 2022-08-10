@@ -32,6 +32,7 @@ type Loop struct {
 	exited            chan struct{}
 	startDuration     chan *time.Duration
 	stopDuration      chan *time.Duration
+	log               Logger
 }
 
 // NewLoop returns a new Loop with the given start and end cron specs and function.
@@ -71,7 +72,12 @@ func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context, wg *sync.
 	}, nil
 }
 
+func (l *Loop) SetLogger(log Logger) {
+	l.log = log
+}
+
 // ChangeStartSchedules sets the start cron specs.
+// Currently not effects immediately will add in next version..
 func (l *Loop) ChangeStartSchedules(startSpecs []string) error {
 	var startSchedules []Schedule
 
@@ -90,6 +96,7 @@ func (l *Loop) ChangeStartSchedules(startSpecs []string) error {
 }
 
 // ChangeStopSchedule sets the end cron specs.
+// Currently not effects immediately will add in next version.
 func (l *Loop) ChangeStopSchedules(startSpecs []string) error {
 	var stopSchedules []Schedule
 
@@ -169,12 +176,18 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 				startTime, _ := l.getStartTime(now)
 				if startTime == nil {
 					// disable next start time
+					if l.log != nil {
+						l.log.Info("Next start time disabled")
+					}
 					l.startDuration <- nil
 
 					continue
 				}
 
 				// set next start time
+				if l.log != nil {
+					l.log.Info("Next start time: %s", startTime)
+				}
 				duration := startTime.Sub(now)
 				l.startDuration <- &duration
 			}
@@ -299,13 +312,21 @@ func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 
 	// set next stop time
-	now := time.Now().Add(GapDurationStop)
+	now := time.Now().Add(GapDurationStart)
 	stopTime, _ := l.getStopTime(now)
 	if stopTime == nil {
 		// disable next stop time
+		if l.log != nil {
+			l.log.Info("Next stop time disabled")
+		}
+
 		l.stopDuration <- nil
 
 		return
+	}
+
+	if l.log != nil {
+		l.log.Info("Next stop time: %s", stopTime)
 	}
 
 	stopDuration := stopTime.Sub(now)
