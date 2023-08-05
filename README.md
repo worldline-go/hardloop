@@ -1,5 +1,13 @@
 # hardloop
 
+[![License](https://img.shields.io/github/license/worldline-go/hardloop?color=red&style=flat-square)](https://raw.githubusercontent.com/worldline-go/hardloop/main/LICENSE)
+[![Coverage](https://img.shields.io/sonar/coverage/worldline-go_hardloop?logo=sonarcloud&server=https%3A%2F%2Fsonarcloud.io&style=flat-square)](https://sonarcloud.io/summary/overall?id=worldline-go_hardloop)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/worldline-go/hardloop/test.yml?branch=main&logo=github&style=flat-square&label=ci)](https://github.com/worldline-go/hardloop/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/worldline-go/hardloop?style=flat-square)](https://goreportcard.com/report/github.com/worldline-go/hardloop)
+[![Go PKG](https://raw.githubusercontent.com/worldline-go/guide/main/badge/custom/reference.svg)](https://pkg.go.dev/github.com/worldline-go/hardloop)
+[![Web](https://img.shields.io/badge/web-document-blueviolet?style=flat-square)](https://worldline-go.github.io/hardloop/)
+
+
 Hardloop is a cron time-based function runner.
 
 Set start and end times as cron specs, and give function to run between them.
@@ -25,6 +33,9 @@ If just stop time given, it will restart in the stop times.
 Use Timezone to set the timezone: `CRON_TZ=Europe/Istanbul 0 7 * * 1,2,3,4,5` 
 
 Default timezone is system timezone.
+
+> Some times doens't exist in some timezones.
+> For example, `CRON_TZ=Europe/Amsterdam 30 2 26 3 *` doesn't exist due to in that time 02:00 -> 03:00 DST 1 hour adding. It will be make some problems so don't use non-exist times.
 
 ```go
 // Set start cron specs.
@@ -66,5 +77,6 @@ myFunctionLoop.SetLogger(myLog{})
 Test code
 
 ```sh
-make coverage html-wsl
+make test
+# make coverage html-wsl
 ```

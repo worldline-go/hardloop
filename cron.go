@@ -6,6 +6,9 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// YearLimit is the maximum number of years to search for a matching time.
+var YearLimit = 5
+
 type Schedule interface {
 	// Next returns the next time this schedule is activated, greater than the given time.
 	Next(time.Time) time.Time
@@ -56,7 +59,7 @@ func (s *SpecSchedule) Next(t time.Time) time.Time {
 	added := false
 
 	// If no time is found within five years, return zero.
-	yearLimit := t.Year() + 5
+	yearLimit := t.Year() + YearLimit
 
 WRAP:
 	if t.Year() > yearLimit {
@@ -177,7 +180,7 @@ func (s *SpecSchedule) Prev(t time.Time) time.Time {
 	added := false
 
 	// If no time is found within five years, return zero.
-	yearLimit := t.Year() - 5
+	yearLimit := t.Year() - YearLimit
 
 WRAP:
 	if t.Year() < yearLimit {
@@ -227,7 +230,7 @@ WRAP:
 		t = t.AddDate(0, 0, -1)
 
 		if !dayMatches(s, t) && t.Hour() == 0 {
-			t = t.Add(time.Hour * 23)
+			t = t.Add(time.Hour * 23) //nolint:gomnd // 23 is the last hour of the day
 		}
 
 		if t.Day()-currentDay != 1 {
@@ -284,7 +287,7 @@ WRAP:
 	return t.In(origLocation)
 }
 
-// edited function of github.com/robfig/cron/v3 to changed day of week and day of month both usage
+// edited function of github.com/robfig/cron/v3 to changed day of week and day of month both usage.
 func dayMatches(s *SpecSchedule, t time.Time) bool {
 	var (
 		domMatch bool = 1<<uint(t.Day())&s.Dom > 0
@@ -321,7 +324,7 @@ func ParseStandard(spec string) (*SpecSchedule, error) {
 		return nil, err
 	}
 
-	return &SpecSchedule{SpecSchedule: specSchedule.(*cron.SpecSchedule)}, nil
+	return &SpecSchedule{SpecSchedule: specSchedule.(*cron.SpecSchedule)}, nil //nolint:forcetypeassert // no need to check
 }
 
 // Parser is default parser for cron to replacing the functions.
@@ -329,7 +332,9 @@ type Parser struct {
 	ParseFn func(standardSpec string) (cron.Schedule, error)
 }
 
-func (p Parser) Parse(spec string) (cron.Schedule, error) {
+// Parse returns a new cron schedule for the given spec.
+// It use hardloop.Schedule interface instead of cron.Schedule.
+func (p Parser) Parse(spec string) (cron.Schedule, error) { //nolint:ireturn // return interface to support other interfaces
 	parseFn := p.ParseFn
 	if parseFn == nil {
 		parseFn = cron.ParseStandard
@@ -340,17 +345,17 @@ func (p Parser) Parse(spec string) (cron.Schedule, error) {
 		return nil, err
 	}
 
-	return &SpecSchedule{SpecSchedule: specSchedule.(*cron.SpecSchedule)}, nil
+	return &SpecSchedule{SpecSchedule: specSchedule.(*cron.SpecSchedule)}, nil //nolint:forcetypeassert // no need to check
 }
 
 // Parse2 is a helper function for parsing the spec and returning the SpecSchedule.
-func (p Parser) Parse2(spec string) (Schedule, error) {
+func (p Parser) Parse2(spec string) (Schedule, error) { //nolint:ireturn // return interface to support other interfaces
 	v, err := p.Parse(spec)
 	if err != nil {
 		return nil, err
 	}
 
-	return v.(*SpecSchedule), nil
+	return v.(*SpecSchedule), nil //nolint:forcetypeassert // no need to check
 }
 
 var _ cron.ScheduleParser = &Parser{}

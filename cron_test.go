@@ -7,6 +7,11 @@ import (
 )
 
 func Test_ParseSchedule(t *testing.T) {
+	logAMS, err := time.LoadLocation("Europe/Amsterdam")
+	if err != nil {
+		t.Fatalf("failed to load location: %v", err)
+	}
+
 	type testTime struct {
 		timeNow time.Time
 		next    []time.Time
@@ -220,6 +225,36 @@ func Test_ParseSchedule(t *testing.T) {
 					},
 					prev: []time.Time{
 						time.Date(2023, time.March, 15, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
+		{
+			message:  "DTS test",
+			schedule: "30 2 26 3 *",
+			tests: []testTime{
+				{
+					timeNow: time.Date(2023, time.March, 1, 0, 0, 0, 0, time.UTC),
+					next: []time.Time{
+						time.Date(2023, time.March, 26, 2, 30, 0, 0, time.UTC),
+					},
+					prev: []time.Time{
+						time.Date(2022, time.March, 26, 2, 30, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
+		{
+			message:  "Amsterdam DTS test",
+			schedule: "CRON_TZ=Europe/Amsterdam 30 1 26 3 *",
+			tests: []testTime{
+				{
+					timeNow: time.Date(2023, time.March, 1, 0, 0, 0, 0, logAMS),
+					next: []time.Time{
+						time.Date(2023, time.March, 26, 1, 30, 0, 0, logAMS),
+					},
+					prev: []time.Time{
+						time.Date(2022, time.March, 26, 1, 30, 0, 0, logAMS),
 					},
 				},
 			},

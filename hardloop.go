@@ -8,13 +8,12 @@ import (
 	"time"
 )
 
-// GapDurationStart to start the function should be at least 1 second bigger than gap duration
-var GapDurationStart time.Duration = 1 * time.Second
-
-// GapDurationStop to stop the function
-var GapDurationStop time.Duration = 0
-
 var (
+	// GapDurationStart to start the function should be at least 1 second bigger than gap duration.
+	GapDurationStart time.Duration = 1 * time.Second //nolint:revive // more readable
+	// GapDurationStop to stop the function.
+	GapDurationStop time.Duration = 0 //nolint:revive // more readable
+
 	// ErrCloseLoop is returned when the loop should be closed.
 	ErrCloseLoop  = errors.New("close loop")
 	errTimeNotSet = errors.New("timeless schedule")
@@ -37,11 +36,11 @@ type Loop struct {
 }
 
 // NewLoop returns a new Loop with the given start and end cron specs and function.
-//  - Standard crontab specs, e.g. "* * * * ?"
-//  - Descriptors, e.g. "@midnight", "@every 1h30m"
+//   - Standard crontab specs, e.g. "* * * * ?"
+//   - Descriptors, e.g. "@midnight", "@every 1h30m"
 func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context, wg *sync.WaitGroup) error) (*Loop, error) {
-	var startSchedules []Schedule
-	var stopSchedules []Schedule
+	startSchedules := make([]Schedule, 0, len(startSpec))
+	stopSchedules := make([]Schedule, 0, len(endSpec))
 
 	for _, spec := range startSpec {
 		startSchedule, err := ParseStandard(spec)
@@ -78,9 +77,9 @@ func (l *Loop) SetLogger(log Logger) {
 }
 
 // ChangeStartSchedules sets the start cron specs.
-// Currently not effects immediately will add in next version..
+// Not effects immediately!
 func (l *Loop) ChangeStartSchedules(startSpecs []string) error {
-	var startSchedules []Schedule
+	startSchedules := make([]Schedule, 0, len(startSpecs))
 
 	for _, spec := range startSpecs {
 		startSchedule, err := ParseStandard(spec)
@@ -97,11 +96,11 @@ func (l *Loop) ChangeStartSchedules(startSpecs []string) error {
 }
 
 // ChangeStopSchedule sets the end cron specs.
-// Currently not effects immediately will add in next version.
-func (l *Loop) ChangeStopSchedules(startSpecs []string) error {
-	var stopSchedules []Schedule
+// Not effects immediately!
+func (l *Loop) ChangeStopSchedules(stopSpecs []string) error {
+	stopSchedules := make([]Schedule, 0, len(stopSpecs))
 
-	for _, spec := range startSpecs {
+	for _, spec := range stopSpecs {
 		stopSchedule, err := ParseStandard(spec)
 		if err != nil {
 			return err
@@ -257,7 +256,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 					continue
 				}
 
-				// set next stop time
+				// set next stop time and clear the previous one
 				stopTimerChange := time.NewTimer(*stopDuration)
 				chStopDuration = stopTimerChange.C
 
@@ -270,8 +269,8 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 				}
 				stopTimer = stopTimerChange
 			case <-chStopDuration:
-				// run function
-				l.stopFunction(ctxLoop, wg)
+				// time to stop function
+				l.stopFunction()
 			}
 		}
 	}()
@@ -334,13 +333,15 @@ func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
 	l.stopDuration <- &stopDuration
 }
 
-func (l *Loop) stopFunction(ctx context.Context, wg *sync.WaitGroup) {
+func (l *Loop) stopFunction() {
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
+	// if function is not running, trigger exited to get the next start time
 	if !l.isFunctionRunning {
 		// trigger exited
 		l.exited <- struct{}{}
+
 		return
 	}
 
@@ -355,6 +356,7 @@ func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
 	if v != nil {
 		// function should run now
 		l.runFunction(ctx, wg)
+
 		return
 	}
 
@@ -362,7 +364,7 @@ func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
 	l.exited <- struct{}{}
 }
 
-// getStartTime if return nil, start now
+// getStartTime if return nil, start now.
 func (l *Loop) getStartTime(now time.Time) (*time.Time, error) {
 	nextStart := FindNext(l.startSchedules, now)
 
@@ -373,7 +375,7 @@ func (l *Loop) getStartTime(now time.Time) (*time.Time, error) {
 	return &nextStart, nil
 }
 
-// getStopTime if return nil, stop now
+// getStopTime if return nil, stop now.
 func (l *Loop) getStopTime(now time.Time) (*time.Time, error) {
 	prevStop := FindPrev(l.stopSchedules, now)
 

@@ -1,2 +1,4 @@
 /coverage.out
 /coverage.html
+/.golangci.yml
+/golangci-lint-report.out

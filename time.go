@@ -13,6 +13,7 @@ func FindPrev(schedules []Schedule, now time.Time) time.Time {
 
 		if prevTime.IsZero() {
 			prevTime = prev
+
 			continue
 		}
 
@@ -34,6 +35,7 @@ func FindNext(schedules []Schedule, now time.Time) time.Time {
 
 		if nextTime.IsZero() {
 			nextTime = next
+
 			continue
 		}
 
