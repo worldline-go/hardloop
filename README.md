@@ -14,6 +14,8 @@ go get github.com/worldline-go/hardloop
 
 Check the https://crontab.guru/ to explain about cron specs.
 
+> Hardloop different works than _crontab.guru_ in weekdays and day of month selection. We use __and__ operation but that site use __or__ operation when used both of them.
+
 You can give as much as you want start, stop times.
 
 If stop time is not given, it will run forever.
@@ -64,8 +66,5 @@ myFunctionLoop.SetLogger(myLog{})
 Test code
 
 ```sh
-go test -cover -coverprofile=coverage.out ./...
-go tool cover -func=coverage.out
-go tool cover -html=coverage.out
-# go tool cover -html coverage.out -o coverage.html
+make coverage html-wsl
 ```
