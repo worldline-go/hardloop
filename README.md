@@ -5,8 +5,6 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/worldline-go/hardloop/test.yml?branch=main&logo=github&style=flat-square&label=ci)](https://github.com/worldline-go/hardloop/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/worldline-go/hardloop?style=flat-square)](https://goreportcard.com/report/github.com/worldline-go/hardloop)
 [![Go PKG](https://raw.githubusercontent.com/worldline-go/guide/main/badge/custom/reference.svg)](https://pkg.go.dev/github.com/worldline-go/hardloop)
-[![Web](https://img.shields.io/badge/web-document-blueviolet?style=flat-square)](https://worldline-go.github.io/hardloop/)
-
 
 Hardloop is a cron time-based function runner.
 
