@@ -16,7 +16,13 @@ type Schedule interface {
 	Prev(time.Time) time.Time
 }
 
+type DelaySchedule interface {
+	GetDelay() time.Duration
+}
+
 type SpecSchedule struct {
+	ConstantDelaySchedule time.Duration
+
 	*cron.SpecSchedule
 }
 
@@ -30,6 +36,10 @@ const (
 // Next returns the next time this schedule is activated, greater than the given
 // time.  If no time can be found to satisfy the schedule, return the zero time.
 func (s *SpecSchedule) Next(t time.Time) time.Time {
+	if s.ConstantDelaySchedule != 0 {
+		return t.Add(s.ConstantDelaySchedule - time.Duration(t.Nanosecond())*time.Nanosecond)
+	}
+
 	// General approach
 	//
 	// For Month, Day, Hour, Minute, Second:
@@ -151,6 +161,9 @@ WRAP:
 // Prev returns the prev time this schedule is activated, less than the given
 // time.  If no time can be found to satisfy the schedule, return the zero time.
 func (s *SpecSchedule) Prev(t time.Time) time.Time {
+	if s.ConstantDelaySchedule != 0 {
+		return t.Add(-1*s.ConstantDelaySchedule + time.Duration(t.Nanosecond())*time.Nanosecond)
+	}
 	// General approach
 	//
 	// For Month, Day, Hour, Minute, Second:
@@ -324,6 +337,14 @@ func ParseStandard(spec string) (*SpecSchedule, error) {
 		return nil, err
 	}
 
+	if schedule, ok := specSchedule.(DelaySchedule); ok {
+		return &SpecSchedule{ConstantDelaySchedule: schedule.GetDelay()}, nil
+	}
+
+	if schedule, ok := specSchedule.(cron.ConstantDelaySchedule); ok {
+		return &SpecSchedule{ConstantDelaySchedule: schedule.Delay}, nil
+	}
+
 	return &SpecSchedule{SpecSchedule: specSchedule.(*cron.SpecSchedule)}, nil //nolint:forcetypeassert // no need to check
 }
 
@@ -343,6 +364,14 @@ func (p Parser) Parse(spec string) (cron.Schedule, error) { //nolint:ireturn // 
 	specSchedule, err := parseFn(spec)
 	if err != nil {
 		return nil, err
+	}
+
+	if schedule, ok := specSchedule.(DelaySchedule); ok {
+		return &SpecSchedule{ConstantDelaySchedule: schedule.GetDelay()}, nil
+	}
+
+	if schedule, ok := specSchedule.(cron.ConstantDelaySchedule); ok {
+		return &SpecSchedule{ConstantDelaySchedule: schedule.Delay}, nil
 	}
 
 	return &SpecSchedule{SpecSchedule: specSchedule.(*cron.SpecSchedule)}, nil //nolint:forcetypeassert // no need to check

@@ -259,6 +259,23 @@ func Test_ParseSchedule(t *testing.T) {
 				},
 			},
 		},
+		{
+			message:  "every 5 minutes",
+			schedule: "@every 5m",
+			tests: []testTime{
+				{
+					timeNow: time.Date(2023, time.March, 1, 0, 10, 0, 0, time.UTC),
+					next: []time.Time{
+						time.Date(2023, time.March, 1, 0, 15, 0, 0, time.UTC),
+						time.Date(2023, time.March, 1, 0, 20, 0, 0, time.UTC),
+					},
+					prev: []time.Time{
+						time.Date(2023, time.March, 1, 0, 5, 0, 0, time.UTC),
+						time.Date(2023, time.March, 1, 0, 0, 0, 0, time.UTC),
+					},
+				},
+			},
+		},
 	}
 	for i, tt := range tests {
 		t.Run(fmt.Sprintf("parse_%d", i), func(t *testing.T) {
