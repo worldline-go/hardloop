@@ -22,10 +22,8 @@ Check the https://crontab.guru/ to explain about cron specs.
 
 > Hardloop different works than _crontab.guru_ in weekdays and day of month selection. We use __and__ operation but that site use __or__ operation when used both of them.
 
-You can give as much as you want start, stop times.
-
-If stop time is not given, it will run forever.
-
+You can give as much as you want start, stop times.  
+If stop time is not given, it will run forever.  
 If just stop time given, it will restart in the stop times.
 
 Use Timezone to set the timezone: `CRON_TZ=Europe/Istanbul 0 7 * * 1,2,3,4,5` 
@@ -59,7 +57,22 @@ if err != nil {
 }
 
 // run forever in goroutine (or until the function returns ErrLoopExited)
-myFunctionLoop.RunWait(context.Background(), wg)
+myFunctionLoop.RunWait(ctx)
+```
+
+For simple jobs, you can use `hardloop.NewCron` to create a cron job.
+
+```go
+// Create a new cron job.
+myCronJob, err := hardloop.NewCron(hardloop.Cron{
+	Name:  "MyCronJob",
+	Func:  MyFunction,
+	Specs: []string{"0 7 * * 1-5"}, // Every weekday at 7 AM
+})
+// ... handle error
+
+myCronJob.Start(ctx) // background run the cron job
+// myCronJob.Stop() // to stop the cron job
 ```
 
 ### Set Logger

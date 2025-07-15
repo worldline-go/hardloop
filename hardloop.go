@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -24,9 +25,8 @@ type Loop struct {
 	stopSchedules     []Schedule
 	isLoopRunning     bool
 	isFunctionRunning bool
-	fn                func(ctx context.Context, wg *sync.WaitGroup) error
+	fn                func(ctx context.Context) error
 	mx                sync.RWMutex
-	wg                sync.WaitGroup
 	cancelFn          context.CancelFunc
 	cancelLoop        context.CancelFunc
 	exited            chan struct{}
@@ -38,7 +38,7 @@ type Loop struct {
 // NewLoop returns a new Loop with the given start and end cron specs and function.
 //   - Standard crontab specs, e.g. "* * * * ?"
 //   - Descriptors, e.g. "@midnight", "@every 1h30m"
-func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context, wg *sync.WaitGroup) error) (*Loop, error) {
+func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context) error) (*Loop, error) {
 	startSchedules := make([]Schedule, 0, len(startSpec))
 	stopSchedules := make([]Schedule, 0, len(endSpec))
 
@@ -69,9 +69,13 @@ func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context, wg *sync.
 		exited:            make(chan struct{}, 1),
 		startDuration:     make(chan *time.Duration, 1),
 		stopDuration:      make(chan *time.Duration, 1),
+		log:               slog.Default(),
 	}, nil
 }
 
+// SetLogger sets the logger for the loop.
+//   - If not set, it uses the default slog logger.
+//   - Set to nil to disable logging.
 func (l *Loop) SetLogger(log Logger) {
 	l.log = log
 }
@@ -128,12 +132,6 @@ func (l *Loop) IsFunctionRunning() bool {
 	defer l.mx.RUnlock()
 
 	return l.isFunctionRunning
-}
-
-// SetFunction sets the function to be called when the loop is started.
-// Function should be blocking.
-func (l *Loop) SetFunction(fn func(ctx context.Context, wg *sync.WaitGroup) error, stopPreviousFunction bool) {
-	l.fn = fn
 }
 
 // RunWait starts the loop and wait to exit with ErrLoopExited.
@@ -294,8 +292,7 @@ func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
 		defer wg.Done()
 		var ctxInFunc context.Context
 		ctxInFunc, l.cancelFn = context.WithCancel(ctx)
-		err := l.fn(ctxInFunc, &l.wg)
-		l.wg.Wait()
+		err := l.fn(ctxInFunc)
 
 		// set running to false
 		l.mx.Lock()
@@ -348,7 +345,6 @@ func (l *Loop) stopFunction() {
 	l.isFunctionRunning = false
 
 	l.cancelFn()
-	l.wg.Wait()
 }
 
 func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
