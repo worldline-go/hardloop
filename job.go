@@ -42,6 +42,10 @@ func NewCron(crons ...Cron) (*cronJob, error) {
 			schedules = append(schedules, startSchedule)
 		}
 
+		if len(schedules) == 0 {
+			continue
+		}
+
 		jobs = append(jobs, Cron{
 			Name:      cron.Name,
 			Func:      cron.Func,
@@ -78,6 +82,11 @@ func (c *cronJob) Start(ctx context.Context) error {
 
 	for _, job := range c.Jobs {
 		c.wg.Add(1)
+
+		if c.log != nil {
+			c.log.Info("add cron job", "job", job.Name, "specs", job.Specs)
+		}
+
 		go func(job Cron) {
 			defer c.wg.Done()
 
