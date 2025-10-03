@@ -21,8 +21,7 @@ var (
 )
 
 type Loop struct {
-	startSchedules    []Schedule
-	stopSchedules     []Schedule
+	scheduleGroup     *ScheduleGroup
 	isLoopRunning     bool
 	isFunctionRunning bool
 	fn                func(ctx context.Context) error
@@ -39,30 +38,13 @@ type Loop struct {
 //   - Standard crontab specs, e.g. "* * * * ?"
 //   - Descriptors, e.g. "@midnight", "@every 1h30m"
 func NewLoop(startSpec, endSpec []string, fn func(ctx context.Context) error) (*Loop, error) {
-	startSchedules := make([]Schedule, 0, len(startSpec))
-	stopSchedules := make([]Schedule, 0, len(endSpec))
-
-	for _, spec := range startSpec {
-		startSchedule, err := ParseStandard(spec)
-		if err != nil {
-			return nil, err
-		}
-
-		startSchedules = append(startSchedules, startSchedule)
-	}
-
-	for _, spec := range endSpec {
-		stopSchedule, err := ParseStandard(spec)
-		if err != nil {
-			return nil, err
-		}
-
-		stopSchedules = append(stopSchedules, stopSchedule)
+	scheduleGroup, err := NewSchedule(startSpec, endSpec)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Loop{
-		startSchedules:    startSchedules,
-		stopSchedules:     stopSchedules,
+		scheduleGroup:     scheduleGroup,
 		isLoopRunning:     false,
 		isFunctionRunning: false,
 		fn:                fn,
@@ -94,7 +76,7 @@ func (l *Loop) ChangeStartSchedules(startSpecs []string) error {
 		startSchedules = append(startSchedules, startSchedule)
 	}
 
-	l.startSchedules = startSchedules
+	l.scheduleGroup.StartSchedules = startSchedules
 
 	return nil
 }
@@ -113,7 +95,7 @@ func (l *Loop) ChangeStopSchedules(stopSpecs []string) error {
 		stopSchedules = append(stopSchedules, stopSchedule)
 	}
 
-	l.stopSchedules = stopSchedules
+	l.scheduleGroup.StopSchedules = stopSchedules
 
 	return nil
 }
@@ -162,7 +144,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 			case <-l.exited:
 				now := time.Now().Add(GapDurationStart)
 				// check it can run in now
-				stopTime, _ := l.getStopTime(now)
+				stopTime, _ := l.scheduleGroup.getStopTime(now)
 				if stopTime != nil {
 					l.runFunction(ctxLoop, wg)
 
@@ -171,7 +153,7 @@ func (l *Loop) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 				now = time.Now()
 				// check next time to start again
-				startTime, _ := l.getStartTime(now)
+				startTime, _ := l.scheduleGroup.getStartTime(now)
 				if startTime == nil {
 					// disable next start time
 					if l.log != nil {
@@ -310,7 +292,7 @@ func (l *Loop) runFunction(ctx context.Context, wg *sync.WaitGroup) {
 
 	// set next stop time
 	now := time.Now().Add(GapDurationStart)
-	stopTime, _ := l.getStopTime(now)
+	stopTime, _ := l.scheduleGroup.getStopTime(now)
 	if stopTime == nil {
 		// disable next stop time
 		if l.log != nil {
@@ -348,7 +330,7 @@ func (l *Loop) stopFunction() {
 }
 
 func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
-	v, _ := l.getStopTime(time.Now().Add(GapDurationStart))
+	v, _ := l.scheduleGroup.getStopTime(time.Now().Add(GapDurationStart))
 	if v != nil {
 		// function should run now
 		l.runFunction(ctx, wg)
@@ -358,42 +340,4 @@ func (l *Loop) initializeTime(ctx context.Context, wg *sync.WaitGroup) {
 
 	// set next start time
 	l.exited <- struct{}{}
-}
-
-// getStartTime if return nil, start now.
-func (l *Loop) getStartTime(now time.Time) (*time.Time, error) {
-	nextStart := FindNext(l.startSchedules, now)
-
-	if nextStart.IsZero() {
-		return nil, errTimeNotSet
-	}
-
-	return &nextStart, nil
-}
-
-// getStopTime if return nil, stop now.
-func (l *Loop) getStopTime(now time.Time) (*time.Time, error) {
-	prevStop := FindPrev(l.stopSchedules, now)
-
-	if prevStop.IsZero() {
-		// stop the loop
-		return nil, errTimeNotSet
-	}
-
-	prevStart := FindPrev(l.startSchedules, now)
-
-	// if prevStop is after prevStart, then we should stop the loop
-	if !prevStart.IsZero() && prevStop.After(prevStart) {
-		// stop the loop
-		return nil, nil
-	}
-
-	nextStop := FindNext(l.stopSchedules, now)
-
-	if nextStop.IsZero() {
-		// stop the loop
-		return nil, errTimeNotSet
-	}
-
-	return &nextStop, nil
 }
